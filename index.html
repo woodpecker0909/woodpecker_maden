@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>붙박이장 자동 설계 계산기 v10 (통 밀착 · 색상 시퀀스)</title>
+  <style>
+    :root{
+      --bg:#f5f7fb; --text:#1f2937; --muted:#6b7280; --line:#e5e7eb;
+      --brand:#0f7bff; --chip-bg:#eef2ff; --chip-bd:#c7d2fe; --chip-tx:#1e3a8a;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif}
+    .container{max-width:1000px;margin:0 auto;padding:20px 14px 170px}
+    .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 4px 12px rgba(0,0,0,.05)}
+    h1{margin:0 0 8px;font-size:20px}
+    h2{margin:0 0 12px;font-size:16px}
+    .muted{color:var(--muted);font-size:13px}
+    .btn{border:0;border-radius:8px;background:var(--brand);color:#fff;padding:8px 12px;font-size:14px;cursor:pointer}
+    .btn.ghost{background:#fff;color:var(--brand);border:1px solid var(--brand)}
+    .ok{color:#087443}.warn{color:#b00020}
+    .slot{border:1px solid #e5f0f5;border-radius:12px;padding:10px;margin-bottom:12px}
+    .slot h3{margin:0 0 8px;font-size:14px;display:flex;justify-content:space-between;align-items:center}
+    .chip{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--chip-bg);color:var(--chip-tx);border:1px solid var(--chip-bd)}
+    .thumb-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+    .thumb{border:2px solid transparent;border-radius:10px;overflow:hidden;background:#fff;cursor:pointer}
+    .thumb img{display:block;width:100%;height:auto}
+    .thumb.active{border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.2)}
+    .seq{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;font-family:ui-monospace,Consolas,monospace;font-size:14px;line-height:1.5}
+    .checks{display:flex;gap:12px;flex-wrap:wrap;margin:6px 0 8px}
+    label.inline{display:flex;align-items:center;gap:8px}
+    input[type="number"]{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    @media (max-width:760px){.row{grid-template-columns:1fr}}
+    .preview-wrap{display:flex;flex-direction:column;gap:8px}
+    .preview-box{background:#fff;border:1px solid var(--line);border-radius:12px;min-height:120px;display:flex;justify-content:center;align-items:center;overflow:auto;padding:10px}
+    .sticky-bar{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.96);border-top:1px solid var(--line);backdrop-filter:blur(6px);padding:10px 14px;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
+    .summary-line{margin:6px 0}
+    .note-list{margin:6px 0 0 0; padding-left:18px; color:#374151; font-size:13px}
+    .note-list .red{color:#d00000; font-weight:600}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>📐 붙박이장 자동 설계 계산기 v10</h1>
+      <div class="muted"><b>실제 폭(mm) 비율</b> · <b>큰장 도어 중앙 3mm 점선</b> · <b>작은장: 높이 동일·폭 절반</b> · <b>미리보기: 통끼리 완전 밀착</b></div>
+    </div>
+
+    <div class="card">
+      <h2>입력</h2>
+      <div class="summary-line">
+        <label>벽 전체 길이 (mm)<br/>
+          <input id="wall" type="number" value="3700" min="1000" placeholder="예: 3700">
+        </label>
+      </div>
+
+      <div class="summary-line">
+        <b>허용 세트</b>
+        <div class="checks">
+          <label class="inline"><input type="checkbox" id="set105" checked> 1000 + 500</label>
+          <label class="inline"><input type="checkbox" id="set945" checked> 900 + 450</label>
+          <label class="inline"><input type="checkbox" id="set840" checked> 800 + 400</label>
+        </div>
+      </div>
+
+      <div class="summary-line">
+        <b>추가 옵션</b>
+        <div class="checks">
+          <label class="inline"><input type="checkbox" id="pairRequired"> 짝 필수(큰장+작은장 동시)</label>
+          <label class="inline"><input type="checkbox" id="onlyOddDoors"> 홀수 도어만</label>
+        </div>
+      </div>
+
+      <button class="btn" id="calcBtn">계산하기</button>
+      <div id="summary" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card" id="designCard" style="display:none;">
+      <h2>디자인 선택 (A~I)</h2>
+      <div class="row">
+        <div><div id="slotsWrap"></div></div>
+
+        <div class="preview-wrap">
+          <div><b>미니 조립 미리보기</b></div>
+          <div class="preview-box"><canvas id="previewCanvas"></canvas></div>
+          <div class="muted">좌/우 서라운드, 각 통 폭(mm) 표기 · 큰장 도어 중앙 <b>3mm</b> 점선만 시각화 · 통끼리는 완전 밀착</div>
+
+          <div style="margin-top:12px;">
+            <label>스마트스토어 입력용(색상 안내 · 공백 없음)</label>
+            <div id="sequenceBoxCompactColored" class="seq">-</div>
+            <!-- 실제로 복사될 순수 문자열(색상 없음) -->
+            <div id="sequenceBoxCompactCopy" style="display:none;">-</div>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+              <button class="btn" onclick="copyCompact()">복사</button>
+            </div>
+            <ul class="note-list">
+              <li><b>복사한 결과</b>는 상품 옵션 <b>첫 칸(사이즈&디자인 구성)</b>에 붙여넣어 주세요.</li>
+              <li><span class="red">빨간색</span>으로 표시된 <b>통(예: 9A, 9F…)</b>만 장바구니에 순서대로 담아 주세요. <span class="muted">(L/R은 서라운드라 담지 않음)</span></li>
+            </ul>
+            <div class="muted" style="margin-top:6px;">
+              <b style="color:#111">검정</b>=좌/우 서라운드,&nbsp;
+              <b style="color:#d00000">빨강</b>=각 통(숫자+알파벳) · 예) <span style="color:#111">50L</span>-<span style="color:#d00000">9A</span>-<span style="color:#d00000">9F</span>-<span style="color:#d00000">9E</span>-<span style="color:#d00000">9I</span>-<span style="color:#111">50R</span>
+            </div>
+          </div>
+
+          <div style="margin-top:8px;">
+            <button class="btn" onclick="downloadPreview()">최종이미지 저장</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sticky-bar">
+    <div class="muted">계산 → 추천안 선택 → 디자인 선택 → 색상 시퀀스 복사 & 미리보기 저장</div>
+    <button class="btn" onclick="calculate()">다시 계산</button>
+  </div>
+
+<script>
+  // ====== 설정 ======
+  const MIN_SURROUND = 40;       // 서라운드 최소 40mm
+  const LEFTOVER_TIE_MM = 20;    // 동률 판정 허용 오차
+  const DOOR_GAP_MM = 3;         // 큰장 중앙 가상 도어 간격
+  const UNIT_GAP_PX = 0;         // ★ 통 사이 여백(픽셀) = 0 → 완전 밀착
+
+  // 세트(큰장+작은장)
+  const SETS = [
+    { id:"set105", name:"1000+500", big:1000, small:500, priority:0 }, // 1000 우선
+    { id:"set945", name:"900+450",  big:900,  small:450, priority:1 },
+    { id:"set840", name:"800+400",  big:800,  small:400, priority:2 },
+  ];
+
+  // 디자인 목록
+  const LETTERS_BIG   = ["A","B","C","D","E","F","G","H","I"];
+  const LETTERS_SMALL = ["A","B","C","G","H","I"]; // 작은장: D,E,F 제외
+  // 기본 썸네일(큰장) 매핑
+  const THUMBS_BIG = Object.fromEntries(LETTERS_BIG.map(ch => [ch, `design_${ch}.png`]));
+
+  let topRows=[], selections=[], currentPlan=null;
+
+  document.getElementById('calcBtn').addEventListener('click', calculate);
+  document.getElementById('wall').addEventListener('keydown', e=>{ if(e.key==='Enter') calculate(); });
+
+  function calculate(){
+    const wall=parseInt(document.getElementById('wall').value,10);
+    const pairRequired=document.getElementById('pairRequired').checked;
+    const onlyOdd=document.getElementById('onlyOddDoors').checked;
+    const summary=document.getElementById('summary'); summary.innerHTML=""; document.getElementById('designCard').style.display="none";
+    if(!wall||wall<1000){summary.innerHTML="<div class='warn'>⚠️ 1000mm 이상 입력</div>";return;}
+
+    const enabledSets=SETS.filter(s=>document.getElementById(s.id).checked);
+    if(enabledSets.length===0){summary.innerHTML="<div class='warn'>⚠️ 최소 1개 세트를 선택하세요.</div>";return;}
+
+    let rows=[];
+    for(const set of enabledSets){
+      for(let bc=0;bc<=14;bc++){
+        for(let sc=0;sc<=14;sc++){
+          if(bc===0&&sc===0)continue;
+          if(pairRequired&&(bc===0||sc===0))continue;
+          const used=set.big*bc+set.small*sc; if(used>wall)continue;
+          const leftover=wall-used; const surround=leftover/2; if(surround<MIN_SURROUND)continue;
+          const doors=2*bc+sc; if(onlyOdd&&doors%2===0)continue;
+          rows.push({set:set.name,big:set.big,small:set.small,bc,sc,used,leftover,surround,doors,priority:set.priority});
+        }
+      }
+    }
+    if(rows.length===0){summary.innerHTML="<div class='warn'>조건에 맞는 조합 없음</div>";return;}
+
+    rows.sort((a,b)=>{
+      const diff=Math.abs(a.leftover-b.leftover);
+      if(diff<=LEFTOVER_TIE_MM && a.priority!==b.priority) return a.priority-b.priority;  // 1000 우선
+      if(a.leftover!==b.leftover) return a.leftover-b.leftover;                            // 서라운드 얇게
+      if(a.doors!==b.doors) return a.doors-b.doors;                                        // 도어 적게
+      return (a.bc+a.sc)-(b.bc+b.sc);                                                      // 통 수 적게
+    });
+
+    topRows=rows.slice(0,3);
+    summary.innerHTML="<div class='ok'><b>✅ 추천 조합 Top3 (서라운드 우선)</b></div>"+
+      topRows.map((r,i)=>`<div class='summary-line'>
+        <button class='btn ghost' onclick='choosePlan(${i})'>${i+1}안 선택</button>
+        ${r.set} · 큰장${r.bc} 작은장${r.sc} = 총 ${(r.bc+r.sc)}통
+        · 도어 ${r.doors}개 · 서라운드 ${Math.round(r.surround)}mm/측 (남는폭 ${r.leftover}mm)
+      </div>`).join("");
+  }
+
+  function choosePlan(idx){
+    const r=topRows[idx]; currentPlan=r;
+    const unitCount=r.bc+r.sc;
+    const wrap=document.getElementById('slotsWrap'); wrap.innerHTML="";
+    selections=Array(unitCount).fill("A");
+
+    for(let i=0;i<unitCount;i++){
+      const isSmall=i>=r.bc; const letters=isSmall?LETTERS_SMALL:LETTERS_BIG;
+      const defaultLetter=letters[0]; selections[i]=defaultLetter;
+      const slot=document.createElement('div'); slot.className="slot";
+      const chip=isSmall?'<span class="chip">작은장</span>':'<span class="chip">큰장</span>';
+      const mm=isSmall?r.small:r.big;
+      slot.innerHTML=`<h3>${i+1}통 ${chip} <span class="muted">${mm}mm</span></h3>`;
+
+      const grid=document.createElement('div'); grid.className="thumb-grid";
+      letters.forEach(letter=>{
+        const div=document.createElement('div'); div.className="thumb"+(letter===defaultLetter?" active":""); div.dataset.letter=letter;
+        const img=document.createElement('img'); img.src=getThumbSrc(letter,false); img.alt=letter; div.appendChild(img);
+        div.addEventListener('click',()=>{
+          selections[i]=letter; grid.querySelectorAll('.thumb').forEach(t=>t.classList.remove('active'));
+          div.classList.add('active'); updateSequences(); renderPreview();
+        });
+        grid.appendChild(div);
+      });
+      slot.appendChild(grid); wrap.appendChild(slot);
+    }
+    document.getElementById('designCard').style.display="block";
+    updateSequences(); renderPreview();
+    window.scrollTo({ top: document.getElementById('designCard').offsetTop - 10, behavior: 'smooth' });
+  }
+
+  // 이미지 소스: 작은장 이미지가 있으면 우선(s_design_*), 없으면 큰장 이미지로 폴백
+  function getImageSrc(letter, isSmall){
+    if(isSmall){
+      const smallSrc = `s_design_${letter}.png`;
+      // 미리 로딩 없이 바로 시도 → onerror 시 폴백
+      return smallSrc;
+    }
+    return `design_${letter}.png`;
+  }
+  function getThumbSrc(letter){ return THUMBS_BIG[letter] || `design_${letter}.png`; }
+
+  // ====== 시퀀스(컴팩트·색상표시) ======
+  function buildCompactColoredSequence(){
+    if(!currentPlan) return { displayHtml:"-", copyText:"-" };
+
+    const surr = Math.round(currentPlan.surround);
+    const units = selections.map((ch, i) => {
+      const mm = (i < currentPlan.bc) ? currentPlan.big : currentPlan.small;
+      const dcm = +(mm/100).toFixed(mm%100?1:0); // 900→9 / 850→8.5
+      return `${dcm}${ch}`;                       // 숫자 먼저: 9A, 8.5B ...
+    });
+
+    const copyText = `${surr}L-${units.join("-")}-${surr}R`;
+
+    const black = (t)=>`<span style="color:#111">${t}</span>`;
+    const red   = (t)=>`<span style="color:#d00000">${t}</span>`;
+
+    const displayHtml = [
+      black(`${surr}L`),
+      ...units.map(u=>red(u)),
+      black(`${surr}R`)
+    ].join(`<span style="color:#999">-</span>`);
+
+    return { displayHtml, copyText };
+  }
+
+  function updateSequences(){
+    const compact = buildCompactColoredSequence();
+    const boxColored = document.getElementById('sequenceBoxCompactColored');
+    const boxColoredCopy = document.getElementById('sequenceBoxCompactCopy');
+    if(boxColored)      boxColored.innerHTML = compact.displayHtml;
+    if(boxColoredCopy)  boxColoredCopy.textContent = compact.copyText;
+  }
+
+  // ====== 미리보기 렌더 ======
+  async function renderPreview(){
+    const canvas=document.getElementById('previewCanvas'); const ctx=canvas.getContext('2d');
+    const unitH=240, labelH=28;
+    if(!currentPlan){canvas.width=0;canvas.height=0;return;}
+    const {bc,sc,big,small,surround}=currentPlan;
+    const count=selections.length||0; if(count===0){canvas.width=0;canvas.height=0;return;}
+
+    const basePxPerMm=160/1000; let pxPerMm=basePxPerMm;
+    const totalMm=bc*big+sc*small;
+    let sPx=Math.max(4,Math.round(surround*pxPerMm));
+    let totalW=sPx + (totalMm*pxPerMm) + (UNIT_GAP_PX*(count-1)) + sPx;
+    const maxCanvasW=1200;
+    if(totalW>maxCanvasW){
+      const mmPart=(totalMm*pxPerMm)+(2*sPx);
+      const scale=(maxCanvasW - UNIT_GAP_PX*(count-1)) / mmPart;
+      pxPerMm *= scale;
+      sPx=Math.max(3,Math.round(surround*pxPerMm));
+      totalW=Math.round(sPx + (totalMm*pxPerMm) + (UNIT_GAP_PX*(count-1)) + sPx);
+    }
+    canvas.width=totalW; canvas.height=unitH+labelH;
+
+    // 배경
+    ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    // 좌 서라운드
+    let cursorX=0;
+    ctx.fillStyle="#f0f0f0"; ctx.fillRect(cursorX,0,sPx,unitH);
+    ctx.strokeStyle="#cfcfcf"; ctx.strokeRect(cursorX+0.5,0.5,sPx-1,unitH-1);
+    ctx.fillStyle="#555"; ctx.font="12px system-ui"; ctx.textAlign="center";
+    ctx.fillText(`L${Math.round(surround)}mm`, cursorX + sPx/2, unitH - 8);
+    cursorX+=sPx;
+
+    // 유닛들 (완전 밀착)
+    const unitWidthsMm=selections.map((_,idx)=> idx<bc?big:small);
+    for(let i=0;i<count;i++){
+      const mm=unitWidthsMm[i];
+      const slotW=mm*pxPerMm;
+      const letter=selections[i];
+      const isSmall = (i>=bc);
+      const srcPrimary = getImageSrc(letter, isSmall);
+      let drew = false;
+
+      // 이미지 로딩(작은장 우선 → 실패 시 큰장 폴백)
+      try{
+        const img=await loadImage(srcPrimary);
+        drawUnitImage(ctx, img, slotW, unitH, cursorX, isSmall);
+        drew = true;
+      }catch(e){
+        if(isSmall){
+          try{
+            const fallback = await loadImage(`design_${letter}.png`);
+            drawUnitImage(ctx, fallback, slotW, unitH, cursorX, isSmall);
+            drew = true;
+          }catch(_){}
+        }
+      }
+      if(!drew){
+        // 폴백 테두리 + 라벨
+        ctx.strokeStyle="#999"; ctx.strokeRect(cursorX+4,4,slotW-8,unitH-8);
+        ctx.fillStyle="#333"; ctx.font="bold 22px system-ui"; ctx.textAlign="center";
+        ctx.fillText(letter, cursorX + slotW/2, unitH/2 + 8);
+      }
+
+      // 큰장 중앙 3mm 점선(시각화만)
+      if(!isSmall){
+        const gapPx=Math.max(1, DOOR_GAP_MM * pxPerMm);
+        const mid=cursorX + slotW/2;
+        ctx.save(); ctx.strokeStyle="#8aa3ff"; ctx.lineWidth=1; ctx.setLineDash([4,4]);
+        ctx.beginPath(); ctx.moveTo(Math.round(mid-gapPx/2)+0.5, 0); ctx.lineTo(Math.round(mid-gapPx/2)+0.5, unitH); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(Math.round(mid+gapPx/2)+0.5, 0); ctx.lineTo(Math.round(mid+gapPx/2)+0.5, unitH); ctx.stroke();
+        ctx.restore();
+      }
+
+      // 하단 폭 라벨
+      ctx.fillStyle="#111"; ctx.font="12px system-ui"; ctx.textAlign="center";
+      ctx.fillText(`${mm}mm`, cursorX + slotW/2, unitH + labelH - 8);
+
+      cursorX += slotW + (i<count-1 ? UNIT_GAP_PX : 0);
+    }
+
+    // 우 서라운드
+    ctx.fillStyle="#f0f0f0"; ctx.fillRect(cursorX,0,sPx,unitH);
+    ctx.strokeStyle="#cfcfcf"; ctx.strokeRect(cursorX+0.5,0.5,sPx-1,unitH-1);
+    ctx.fillStyle="#555"; ctx.font="12px system-ui"; ctx.textAlign="center";
+    ctx.fillText(`R${Math.round(surround)}mm`, cursorX + sPx/2, unitH - 8);
+  }
+
+  function drawUnitImage(ctx, img, slotW, unitH, cursorX, isSmall){
+    if(!isSmall){
+      // 큰장: 비율 유지
+      const ratio=Math.min(slotW/img.width, unitH/img.height);
+      const w=Math.round(img.width*ratio);
+      const h=Math.round(img.height*ratio);
+      const x=cursorX + Math.round((slotW - w)/2);
+      const y=Math.round((unitH - h)/2);
+      ctx.drawImage(img, x, y, w, h);
+    } else {
+      // 작은장: 높이 동일, 폭만 절반 → 강제 맞춤
+      ctx.drawImage(img, cursorX, 0, slotW, unitH);
+    }
+  }
+
+  function loadImage(src){
+    return new Promise((res, rej)=>{
+      const img=new Image();
+      img.onload=()=>res(img);
+      img.onerror=()=>rej(new Error("load fail:"+src));
+      img.src=src;
+    });
+  }
+
+  function downloadPreview(){
+    const canvas=document.getElementById('previewCanvas');
+    if(!canvas||canvas.width===0){alert("먼저 추천안을 선택하고 디자인을 고르세요.");return;}
+    const a=document.createElement('a');
+    a.href=canvas.toDataURL("image/png");
+    a.download="최종조립미리보기.png";
+    a.click();
+  }
+
+  function copyCompact(){
+    const t=document.getElementById('sequenceBoxCompactCopy').textContent;
+    if(!t||t==='-'){alert('먼저 추천안을 선택하고 디자인을 고르세요.');return;}
+    navigator.clipboard.writeText(t).then(()=>alert("복사됨"));
+  }
+</script>
+</body>
+</html>
