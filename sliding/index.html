@@ -1,1 +1,324 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>슬라이딩 붙박이장 자동 설계 계산기 (COMPACT · 저장 포함)</title>
+<style>
+  :root{
+    --blue:#2563eb; --muted:#6b7280; --red:#d12c2c; --black:#111;
+    --bg:#f7f8fb; --card:#fff; --border:#e5e7eb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:#1f2937;font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans KR",sans-serif}
+  .container{max-width:1000px;margin:0 auto;padding:20px 14px 160px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:0 6px 14px rgba(0,0,0,.05);padding:16px;margin-bottom:16px}
+  h1{margin:0 0 8px;font-size:20px} h2{margin:0 0 12px;font-size:16px}
+  .muted{color:var(--muted);font-size:13px}
+  input[type="number"]{width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px}
+  label.inline{display:flex;align-items:center;gap:8px}
+  .checks{display:flex;gap:12px;flex-wrap:wrap}
+  .btn{border:0;border-radius:10px;background:var(--blue);color:#fff;padding:9px 14px;cursor:pointer;font-size:14px}
+  .btn.ghost{background:transparent;color:var(--blue);border:1px solid var(--blue)}
+  .summary-line{margin:6px 0}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media (max-width:760px){.row{grid-template-columns:1fr}}
+  .slot{border:1px solid #eaf0f5;border-radius:12px;padding:10px;margin-bottom:12px}
+  .slot h3{margin:0 0 8px;font-size:14px;display:flex;justify-content:space-between;align-items:center}
+  .thumb-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .thumb{border:2px solid transparent;border-radius:10px;overflow:hidden;background:#fff;cursor:pointer}
+  .thumb.active{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.2)}
+  .thumb img{display:block;width:100%;height:auto}
+  .preview-box{border:1px solid var(--border);border-radius:12px;background:#fff;display:flex;justify-content:center;align-items:center;min-height:140px;overflow:auto}
+  .seq{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px;font-family:ui-monospace,Menlo,Consolas,monospace}
+  .seq .r{ color:#d12c2c; font-weight:600; } /* 통(빨강) */
+  .seq .k{ color:#111; font-weight:700; } /* 서라운드(L/R=검정) */
+  .sticky{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.97);border-top:1px solid var(--border);backdrop-filter:blur(6px);padding:10px 14px;display:grid;grid-template-columns:1fr auto;gap:10px}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="card">
+    <h1>📐 슬라이딩 붙박이장 자동 설계 계산기</h1>
+    <div class="muted">
+      작은장 없음 · 허용 폭: <b>800 / 850 / 900 / 950 / 1000</b> · 도어(=통) 개수 자동 탐색 <b>2~4</b><br/>
+      <b>서라운드 자동 계산(최소 40mm/측)</b> · 미리보기는 통끼리 <b>완전 밀착</b>
+    </div>
+  </div>
 
+  <div class="card">
+    <h2>입력</h2>
+    <div class="summary-line">
+      <label>벽 전체 길이 (mm)<br>
+        <input id="wall" type="number" value="3600" min="1000" placeholder="예: 3600">
+      </label>
+    </div>
+
+    <div class="summary-line">
+      <b>허용 폭 (모두 동일폭 사용)</b>
+      <div class="checks">
+        <label class="inline"><input type="checkbox" id="w1000" checked> 1000</label>
+        <label class="inline"><input type="checkbox" id="w950" checked> 950</label>
+        <label class="inline"><input type="checkbox" id="w900" checked> 900</label>
+        <label class="inline"><input type="checkbox" id="w850" checked> 850</label>
+        <label class="inline"><input type="checkbox" id="w800" checked> 800</label>
+      </div>
+      <div class="muted">※ 슬라이딩은 통마다 폭이 모두 동일합니다.</div>
+    </div>
+
+    <div class="summary-line">
+      <b>도어(=통) 개수</b>
+      <div class="checks">
+        <label class="inline"><input type="checkbox" id="d2" checked> 2개</label>
+        <label class="inline"><input type="checkbox" id="d3" checked> 3개</label>
+        <label class="inline"><input type="checkbox" id="d4" checked> 4개</label>
+      </div>
+    </div>
+
+    <button class="btn" id="calcBtn">계산하기</button>
+    <div id="summary" style="margin-top:10px;"></div>
+  </div>
+
+  <div class="card" id="designCard" style="display:none;">
+    <h2>디자인 선택 (A~I)</h2>
+    <div class="row">
+      <div>
+        <div id="slotsWrap"></div>
+      </div>
+      <div>
+        <div class="preview-box"><canvas id="previewCanvas"></canvas></div>
+
+        <div style="margin-top:12px">
+          <label>COMPACT 시퀀스 <small>(공백 없음 · <span class="k">검정=L/R</span>, <span class="r">빨강=각 통</span>)</small></label>
+          <div id="seqCompact" class="seq">-</div>
+          <button class="btn" style="margin-top:8px" onclick="copyCompact()">복사</button>
+          <div class="muted" style="margin-top:8px">
+            • 복사한 결과는 <b>상품 옵션 첫 칸(사이즈&디자인 구성)</b>에 붙여넣어 주세요.<br/>
+            • <span class="r">빨강</span>으로 표시된 <b>통(예: 9A, 9F…)</b>만 장바구니에 순서대로 담아 주세요. (L/R은 서라운드라 담지 않음)
+          </div>
+        </div>
+
+        <div style="margin-top:14px">
+          <button class="btn" onclick="downloadPreview()">최종이미지 저장</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sticky">
+  <div class="muted">계산 → 추천안 선택 → 디자인 선택 → 시퀀스/이미지 저장</div>
+  <button class="btn" onclick="calculate()">계산하기</button>
+</div>
+
+<script>
+  // ------- 설정
+  const MIN_SURROUND = 40;
+  const DOOR_COUNTS = [2,3,4]; // 슬라이딩: 도어 수(=통 개수)
+  const WIDTHS_ALL = [1000,950,900,850,800]; // 허용 폭(동일폭)
+
+  const LETTERS = ["A","B","C","D","E","F","G","H","I"];
+  const IMG = Object.fromEntries(LETTERS.map(ch => [ch, `design_${ch}.png`]));
+
+  let topPlans = [];
+  let currentPlan = null;
+  let selections = [];
+
+  document.getElementById('calcBtn').addEventListener('click', calculate);
+  document.getElementById('wall').addEventListener('keydown', e=>{ if(e.key==='Enter') calculate(); });
+
+  function enabledDoorCounts(){
+    const list=[];
+    if(document.getElementById('d2').checked) list.push(2);
+    if(document.getElementById('d3').checked) list.push(3);
+    if(document.getElementById('d4').checked) list.push(4);
+    return list;
+  }
+  function enabledWidths(){
+    const list=[];
+    if(document.getElementById('w1000').checked) list.push(1000);
+    if(document.getElementById('w950').checked) list.push(950);
+    if(document.getElementById('w900').checked) list.push(900);
+    if(document.getElementById('w850').checked) list.push(850);
+    if(document.getElementById('w800').checked) list.push(800);
+    return list;
+  }
+
+  function calculate(){
+    const wall = parseInt(document.getElementById('wall').value,10);
+    const summary = document.getElementById('summary');
+    summary.innerHTML = "";
+    document.getElementById('designCard').style.display="none";
+
+    if(!wall || wall<1000){ summary.innerHTML = "<div style='color:#b00020'>⚠️ 1000mm 이상 입력</div>"; return; }
+
+    const widths = enabledWidths();
+    const doors = enabledDoorCounts();
+    if(widths.length===0){ summary.innerHTML = "<div style='color:#b00020'>⚠️ 최소 1개 폭을 선택</div>"; return; }
+    if(doors.length===0){ summary.innerHTML = "<div style='color:#b00020'>⚠️ 최소 1개 도어 수를 선택</div>"; return; }
+
+    let candidates = [];
+    for(const d of doors){
+      for(const w of widths){
+        const used = d*w;
+        if(used>wall) continue;
+        const leftover = wall - used;
+        const surround = leftover/2;
+        if(surround < MIN_SURROUND) continue;
+        candidates.push({doors:d, width:w, used, leftover, surround});
+      }
+    }
+    if(candidates.length===0){ summary.innerHTML = "<div style='color:#b00020'>조건에 맞는 조합 없음</div>"; return; }
+
+    // 정렬: 서라운드 최소(=leftover 최소) → 폭 큰 것 우선 → 도어 수 적은 것 우선
+    candidates.sort((a,b)=>{
+      if(a.leftover!==b.leftover) return a.leftover - b.leftover;
+      if(a.width!==b.width) return b.width - a.width;
+      return a.doors - b.doors;
+    });
+    topPlans = candidates.slice(0,3);
+
+    summary.innerHTML = "<div style='color:#087443'><b>✅ 추천 조합 Top3 (서라운드 우선)</b></div>" +
+      topPlans.map((p,i)=>`
+        <div class="summary-line">
+          <button class="btn ghost" onclick="choosePlan(${i})">${i+1}안 선택</button>
+          폭 <b>${p.width}mm</b> × 도어 <b>${p.doors}개</b>
+          · 서라운드 <b>${Math.round(p.surround)}mm</b>/측 (남는폭 ${p.leftover}mm)
+        </div>
+      `).join("");
+  }
+
+  function choosePlan(idx){
+    const p = topPlans[idx];
+    currentPlan = p;
+    selections = Array(p.doors).fill("A");
+
+    const wrap = document.getElementById('slotsWrap');
+    wrap.innerHTML = "";
+    for(let i=0;i<p.doors;i++){
+      const slot = document.createElement('div');
+      slot.className = "slot";
+      slot.innerHTML = `<h3>${i+1}통 <span class="muted">${p.width}mm</span></h3>`;
+      const grid = document.createElement('div');
+      grid.className = "thumb-grid";
+      LETTERS.forEach(letter=>{
+        const div=document.createElement('div');
+        div.className="thumb"+(letter==="A"?" active":"");
+        const img=document.createElement('img');
+        img.src=IMG[letter]; img.alt=letter;
+        div.appendChild(img);
+        div.addEventListener('click',()=>{
+          selections[i]=letter;
+          grid.querySelectorAll('.thumb').forEach(t=>t.classList.remove('active'));
+          div.classList.add('active');
+          updateSequence(); renderPreview();
+        });
+        grid.appendChild(div);
+      });
+      slot.appendChild(grid);
+      wrap.appendChild(slot);
+    }
+
+    document.getElementById('designCard').style.display="block";
+    updateSequence(); renderPreview();
+    window.scrollTo({ top: document.getElementById('designCard').offsetTop - 10, behavior:'smooth' });
+  }
+
+  // ---------- 시퀀스 (디시미터 표기, 공백 없음 / 통=빨강, 서라운드=검정)
+  function mmToDmStr(mm){
+    // 100mm = 1dm
+    const dm = mm/100;
+    return (Math.round(dm*10)/10).toString().replace(/\.0$/,''); // 9.0 -> 9
+  }
+
+  function buildCompactSequence(){
+    if(!currentPlan) return {html:"-", text:"-"};
+    const widthDm = mmToDmStr(currentPlan.width);
+    const surrDm = mmToDmStr(Math.round(currentPlan.surround)*10); // mm → dm
+    const left = `<span class="k">${surrDm}L</span>`;
+    const right = `<span class="k">${surrDm}R</span>`;
+    const mids = selections.map(ch=> `<span class="r">${widthDm}${ch}</span>`);
+    const html = [left, ...mids, right].join('-');
+    const text = html.replace(/<[^>]+>/g,''); // 태그 제거 텍스트
+    return {html, text};
+  }
+
+  function updateSequence(){
+    const out = buildCompactSequence();
+    const box = document.getElementById('seqCompact');
+    box.innerHTML = out.html;
+    box.dataset.copy = out.text;
+  }
+
+  function copyCompact(){
+    const box = document.getElementById('seqCompact');
+    const raw = box.dataset.copy || box.textContent;
+    navigator.clipboard.writeText(raw).then(()=>alert('복사됨'));
+  }
+
+  // ---------- 미리보기 (통끼리 완전 밀착, 서라운드 표시, 슬라이딩은 중앙 3mm 선 없음)
+  async function renderPreview(){
+    const canvas=document.getElementById('previewCanvas'), ctx=canvas.getContext('2d');
+    if(!currentPlan){canvas.width=0;canvas.height=0;return;}
+    const unitH=260, labelH=26, gap=0;
+    let pxPerMm=0.16;
+
+    const totalMm = currentPlan.width * currentPlan.doors;
+    let sPx = Math.max(3, Math.round(currentPlan.surround*pxPerMm));
+    let totalW = sPx + totalMm*pxPerMm + gap*(currentPlan.doors-1) + sPx;
+    const maxW=1200;
+    if(totalW>maxW){
+      const mmPart=(totalMm*pxPerMm)+(2*sPx);
+      const scale=(maxW - gap*(currentPlan.doors-1)) / mmPart;
+      pxPerMm*=scale; sPx=Math.max(3,Math.round(currentPlan.surround*pxPerMm));
+      totalW=Math.round(sPx + totalMm*pxPerMm + gap*(currentPlan.doors-1) + sPx);
+    }
+    canvas.width=totalW; canvas.height=unitH+labelH;
+
+    ctx.fillStyle="#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    // 좌 서라운드
+    let x=0;
+    ctx.fillStyle="#f0f0f0"; ctx.fillRect(x,0,sPx,unitH);
+    ctx.strokeStyle="#cfcfcf"; ctx.strokeRect(x+0.5,0.5,sPx-1,unitH-1);
+    ctx.fillStyle="#555"; ctx.font="12px system-ui"; ctx.textAlign="center";
+    ctx.fillText(`L${Math.round(currentPlan.surround)}mm`, x + sPx/2, unitH-8);
+    x+=sPx;
+
+    for(let i=0;i<currentPlan.doors;i++){
+      const mm=currentPlan.width, w=mm*pxPerMm;
+      const letter=selections[i], src=IMG[letter];
+      try{
+        const img=await loadImage(src);
+        const ratio=Math.min(w/img.width, unitH/img.height);
+        const dw=Math.round(img.width*ratio), dh=Math.round(img.height*ratio);
+        const ix=x + Math.round((w-dw)/2), iy=Math.round((unitH-dh)/2);
+        ctx.drawImage(img, ix, iy, dw, dh);
+      }catch(e){
+        ctx.strokeStyle="#999"; ctx.strokeRect(x+4,4,w-8,unitH-8);
+        ctx.fillStyle="#333"; ctx.font="bold 22px system-ui"; ctx.textAlign="center";
+        ctx.fillText(letter, x + w/2, unitH/2 + 8);
+      }
+      // 하단 폭 라벨
+      ctx.fillStyle="#111"; ctx.font="12px system-ui"; ctx.textAlign="center";
+      ctx.fillText(`${mm}mm`, x + w/2, unitH + labelH - 8);
+      x += w + (i<currentPlan.doors-1 ? gap : 0);
+    }
+
+    // 우 서라운드
+    ctx.fillStyle="#f0f0f0"; ctx.fillRect(x,0,sPx,unitH);
+    ctx.strokeStyle="#cfcfcf"; ctx.strokeRect(x+0.5,0.5,sPx-1,unitH-1);
+    ctx.fillStyle="#555"; ctx.fillText(`R${Math.round(currentPlan.surround)}mm`, x + sPx/2, unitH-8);
+  }
+
+  function loadImage(src){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=src; }); }
+
+  // 최종이미지 저장
+  function downloadPreview(){
+    const c=document.getElementById('previewCanvas');
+    if(!c||c.width===0){ alert("먼저 디자인을 선택하세요."); return; }
+    const a=document.createElement('a'); a.href=c.toDataURL("image/png"); a.download="최종조립미리보기.png"; a.click();
+  }
+</script>
+</body>
+</html>
